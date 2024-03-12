@@ -11,7 +11,7 @@ FaceLandmarkerResult = mp.tasks.vision.FaceLandmarkerResult
 VisionRunningMode = mp.tasks.vision.RunningMode
 
 TARGET_IP = "127.0.0.1" # If you run VSeeFace on same computer keep this.
-CAMERA_DEVICE = 1 # zero is usually the default webcam.
+CAMERA_DEVICE = 0 # zero is usually the default webcam.
 
 print("Get camera")
 camera = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_DSHOW) # I had to force DSHOW mode or it would take minutes to start up
