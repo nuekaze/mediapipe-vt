@@ -13,6 +13,6 @@ Send a drink if you liked it!
 https://www.buymeacoffee.com/nuemedia
 
 ## How to run
-1. Install dependencies, prefferably in a venv. "pip install mediapipe opencv-python numpy"
-2. Download facetracker task. https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
-3. Adjust camera device and ip in tracker.py if needed.
+1. Install dependencies, prefferably in a venv. `pip install mediapipe opencv-python numpy`
+2. Download [facetracker task](https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task).
+3. Adjust camera device and ip in tracker.py if needed. (May add launch options later.)
