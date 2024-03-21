@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import time
 import math
+import os
 import socket, json
 import mediapipe as mp
 BaseOptions = mp.tasks.BaseOptions
@@ -14,7 +15,11 @@ TARGET_IP = "127.0.0.1" # If you run VSeeFace on same computer keep this.
 CAMERA_DEVICE = 0 # zero is usually the default webcam.
 
 print("Get camera")
-camera = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_DSHOW) # I had to force DSHOW mode or it would take minutes to start up
+# Try figure out if windows or other os automatically.
+if os.name == 'nt':
+    camera = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_DSHOW) # Force dshow if Windows because it is faster.
+else:
+    camera = cv2.VideoCapture(CAMERA_DEVICE)
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
 
