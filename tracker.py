@@ -18,36 +18,6 @@ camera = cv2.VideoCapture(CAMERA_DEVICE, cv2.CAP_DSHOW) # I had to force DSHOW m
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) 
 
-face_model = {
-    "nose_tip": 1,
-    "left_eye": 33,
-    "right_eye": 263,
-    "left_mouth": 91,
-    "right_mouth": 321,
-    "center_of_face": 152
-}
-
-def calculate_normal_and_roll(A, B, C):
-    AB = B - A
-    AC = C - A
-    
-    normal = np.cross(AB, AC)
-    normal = normal / np.linalg.norm(normal)
-    
-    x = (A[0] + B[0]) / 2
-    y = (A[1] + B[1]) / 2
-    
-    dx = x - C[0]
-    dy = y - C[1]
-    
-    roll = math.atan2(dy, dx)
-    
-    return (
-        normal[0] * 90, # These 90 multiplications controls the amount of rotation of the head.
-        -normal[1] * 90,
-        roll * 90
-    )
-
 data = {"FaceFound": True, "Position": {"x":0.0,"y":0.0,"z":0.0}, "Rotation": {"x":0.0,"y":0.0,"z":0.0}, "BlendShapes": []}
 
 def pred_callback(detection_result: FaceLandmarkerResult, output_image: mp.Image, timestamp_ms: int):
@@ -58,36 +28,18 @@ def pred_callback(detection_result: FaceLandmarkerResult, output_image: mp.Image
             t["k"] = shape.category_name
             t["v"] = shape.score
             data["BlendShapes"].append(t)
-        
-        landmarks = detection_result.face_landmarks[0]
-        
-        data["Position"]["x"] = -landmarks[face_model["center_of_face"]].x * 100
-        data["Position"]["y"] = -landmarks[face_model["center_of_face"]].y * 100
-        
-        dx = (landmarks[face_model["left_eye"]].x - landmarks[face_model["right_eye"]].x)**2
-        dy = (landmarks[face_model["left_eye"]].z - landmarks[face_model["right_eye"]].z)**2
-        data["Position"]["z"] = -(math.sqrt(dx + dy)) * 100
-        
-        rot = calculate_normal_and_roll(
-            np.array([
-                landmarks[face_model["left_eye"]].x,
-                landmarks[face_model["left_eye"]].y,
-                landmarks[face_model["left_eye"]].z
-            ]),
-            np.array([
-                landmarks[face_model["right_eye"]].x,
-                landmarks[face_model["right_eye"]].y,
-                landmarks[face_model["right_eye"]].z
-            ]),
-            np.array([
-                landmarks[face_model["center_of_face"]].x,
-                landmarks[face_model["center_of_face"]].y,
-                landmarks[face_model["center_of_face"]].z
-            ]))
-            
-        data["Rotation"]["x"] = -rot[0]
-        data["Rotation"]["y"] = rot[1]
-        data["Rotation"]["z"] = -rot[2]
+
+        mat = np.array(detection_result.facial_transformation_matrixes[0])
+
+        # Position is in forth column.
+        data["Position"]["x"] = -mat[0][3]
+        data["Position"]["y"] = mat[1][3]
+        data["Position"]["z"] = mat[2][3]
+
+        # Rotation matrix are the first 3x3 in matrix. Do some rotation matrix to euler angles magic.
+        data["Rotation"]["x"] = np.arctan2(-mat[2, 0], np.sqrt(mat[2, 1]**2 + mat[2, 2]**2)) * 180 / math.pi
+        data["Rotation"]["z"] = np.arctan2(mat[1, 0], mat[0, 0]) * 180 / math.pi
+        data["Rotation"]["y"] = np.arctan2(mat[2, 1], mat[2, 2]) * 180 / math.pi
         
         sock.sendto(bytes(json.dumps(data), "utf-8"), (TARGET_IP, 50506))
     
@@ -107,18 +59,24 @@ options = FaceLandmarkerOptions(
 
 # The main loop.
 with FaceLandmarker.create_from_options(options) as detector:
+    tlast = 0
     while 1:
         try:
             # Get image
             _, image = camera.read()
+            image = cv2.flip(image, 1) # Add a flip because most vtuber programs expect this.
             
             # Run inference
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=image)
-            detector.detect_async(mp_image, int(time.time()*1000))
-
+            t = round(time.time() * 1000)
+            if t == tlast:
+                t += 1
+            detector.detect_async(mp_image, t)
+            tlast = t
+        
         except KeyboardInterrupt:
             break
-            
+        
         except Exception as e:
             print(e)
             exit()
