@@ -3,7 +3,7 @@ Use MediaPipe facetracking for VTubing.
 
 This is a very early version. I will work more on it.
 - [x] Face tracking ARKit
-- [ ] Face tracking vowels
+- [ ] Face tracking vowels (works automatically in VSeeFace)
 - [ ] Body tracking
 - [ ] Finger tracking
 
