@@ -30,16 +30,16 @@ parser.add_argument(
     "--target-fps", default=60, type=int, help="set the target speed of sending data"
 )
 parser.add_argument(
-    "--enable-interpolation",
+    "--blendshape-smoothing",
     default=False,
     action="store_true",
-    help="enable experimental interpolation function",
+    help="enable blendshape smoothing",
 )
 parser.add_argument(
-    "--interpolation-strength",
+    "--blendshape-smoothing-strength",
     default=0.4,
     type=float,
-    help="set the power of the interpolation",
+    help="set the power of the smoothing",
 )
 
 args = parser.parse_args()
@@ -117,22 +117,23 @@ data = {
     ],
 }
 
-blenddiff = [0.0] * 53
+latest_data = [0.0] * 53
 
 running = True
-inference_fps = float(args.target_fps)
-
+target_fps = float(args.target_fps)
 
 def pred_callback(
     detection_result: FaceLandmarkerResult, output_image: mp.Image, timestamp_ms: int
 ):
     global data
-    global blenddiff
+    global latest_data
     try:
+        # Handle blendshapes
         for i in range(len(detection_result.face_blendshapes[0])):
-            score = detection_result.face_blendshapes[0][i].score
-            blenddiff[i] = data["BlendShapes"][i]["v"] - score
-            data["BlendShapes"][i]["v"] = score
+            if args.blendshape_smoothing:
+                latest_data[i] = detection_result.face_blendshapes[0][i].score
+            else:
+                data["BlendShapes"][i]["v"] = detection_result.face_blendshapes[0][i].score
 
         mat = np.array(detection_result.facial_transformation_matrixes[0])
 
@@ -166,21 +167,15 @@ def data_send_thread():
         time.sleep((now + fps) - now)
 
 
-def interpolation():
+def blendshape_smoothing():
     global data
     while running:
         now = time.time()
-        fps = 1.0 / inference_fps
+        fps = 1.0 / target_fps
 
-        iterations = float(args.target_fps) / inference_fps
-        for i in range(len(blenddiff)):
-            inter = (
-                data["BlendShapes"][i]["v"]
-                + (blenddiff[i] / iterations) * args.interpolation_strength
-            )
-            inter = max(inter, 0.0)
-            inter = min(inter, 1.0)
-            data["BlendShapes"][i]["v"] = inter
+        for i in range(len(latest_data)):
+            data["BlendShapes"][i]["v"] = data["BlendShapes"][i]["v"] * args.blendshape_smoothing_strength \
+                + latest_data[i] * (1.0 - float(args.blendshape_smoothing_strength))
 
         time.sleep((now + fps) - now)
 
@@ -197,9 +192,9 @@ options = FaceLandmarkerOptions(
 )
 
 # Start thread for sending data.
-if args.enable_interpolation:
-    interpolation_thread = threading.Thread(target=interpolation, daemon=True)
-    interpolation_thread.start()
+if args.blendshape_smoothing:
+    blendshape_smoothing_thread = threading.Thread(target=blendshape_smoothing, daemon=True)
+    blendshape_smoothing_thread.start()
 
 data_thread = threading.Thread(target=data_send_thread, daemon=True)
 data_thread.start()
@@ -209,7 +204,6 @@ with FaceLandmarker.create_from_options(options) as detector:
     tlast = 0
     while running:
         try:
-            start_time = time.time()
             # Start timer for frame.
             t = round(time.time() * 1000)
             if t == tlast:
@@ -229,8 +223,6 @@ with FaceLandmarker.create_from_options(options) as detector:
             # Run inference.
             detector.detect_async(mp_image, t)
 
-            inference_fps = 1.0 / (time.time() - start_time)
-
         except KeyboardInterrupt:
             running = False
 
@@ -240,7 +232,7 @@ with FaceLandmarker.create_from_options(options) as detector:
 
 camera.release()
 
-if args.enable_interpolation:
-    interpolation_thread.join()
+if args.blendshape_smoothing:
+    blendshape_smoothing_thread.join()
 
 data_thread.join()
