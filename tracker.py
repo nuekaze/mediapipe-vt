@@ -5,6 +5,7 @@ import os
 import socket
 import threading
 import time
+import signal
 
 import cv2
 import mediapipe as mp
@@ -40,6 +41,12 @@ parser.add_argument(
     default=0.4,
     type=float,
     help="set the power of the smoothing",
+)
+parser.add_argument(
+    "--listen-killsig",
+    default=False,
+    action="store_true",
+    help="open a port and listen for signal to terminate the process"
 )
 
 args = parser.parse_args()
@@ -121,6 +128,31 @@ latest_data = [0.0] * 53
 
 running = True
 target_fps = float(args.target_fps)
+
+def kill_signal(s, a):
+    global running
+    running = False
+
+signal.signal(signal.SIGINT, kill_signal)
+signal.signal(signal.SIGTERM, kill_signal)
+
+def killsig_listen():
+    global running
+    kill_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    kill_socket.bind(('127.0.0.1', 50523)) # Just some random port
+    
+    # Block thread until we receive any packet. Then just exit.
+    try:
+        m, a = kill_socket.recvfrom(1024)
+        running = False
+    except KeyboardInterrupt:
+        pass
+
+killsig_thread = None
+
+if args.listen_killsig:
+    killsig_thread = threading.Thread(target=killsig_listen, daemon=True)
+    killsig_thread.start()
 
 def pred_callback(
     detection_result: FaceLandmarkerResult, output_image: mp.Image, timestamp_ms: int
@@ -223,9 +255,6 @@ with FaceLandmarker.create_from_options(options) as detector:
             # Run inference.
             detector.detect_async(mp_image, t)
 
-        except KeyboardInterrupt:
-            running = False
-
         except Exception as e:
             print(e)
             running = False
@@ -236,3 +265,7 @@ if args.blendshape_smoothing:
     blendshape_smoothing_thread.join()
 
 data_thread.join()
+
+if args.listen_killsig:
+    socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(b'', ('127.0.0.1', 50523))
+    killsig_thread.join()
