@@ -8,7 +8,6 @@ echo Install dependencies...
 pip install numpy opencv-python mediapipe
 
 echo Download facetracker task...
-curl -o mediapipe-vt-master\face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+curl -Lo mediapipe-vt-master\face_landmarker.task https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task
 
 echo Done!
-pause
